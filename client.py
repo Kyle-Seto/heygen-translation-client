@@ -3,6 +3,7 @@ import time
 import logging
 from typing import Optional, TypedDict
 from urllib.parse import urlparse
+from video_translation_types import StatusResponse
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
