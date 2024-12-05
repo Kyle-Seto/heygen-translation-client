@@ -3,6 +3,8 @@ import time
 import logging
 from typing import Optional, TypedDict
 from urllib.parse import urlparse
+from video_translation_types import StatusResponse
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -21,10 +23,6 @@ class VideoTranslationTimeout(VideoTranslationError):
 class MaxRetriesExceeded(VideoTranslationError):
     """Raised when maximum retry attempts are exceeded."""
     pass
-
-class StatusResponse(TypedDict):
-    """Type definition for status response."""
-    result: str  # 'pending' | 'completed' | 'error'
 
 class VideoTranslationClient:
     def __init__(self, base_url: str = "http://localhost:5000"):
