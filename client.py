@@ -5,10 +5,22 @@ from typing import Optional, TypedDict
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # 5 seconds for all status requests
 GET_STATUS_TIMEOUT = 5
+
+class VideoTranslationError(Exception):
+    """Base exception for video translation errors."""
+    pass
+
+class VideoTranslationTimeout(VideoTranslationError):
+    """Raised when a translation operation times out."""
+    pass
+
+class MaxRetriesExceeded(VideoTranslationError):
+    """Raised when maximum retry attempts are exceeded."""
+    pass
 
 class StatusResponse(TypedDict):
     """Type definition for status response."""
@@ -25,10 +37,11 @@ class VideoTranslationClient:
 
     def __get_status(self) -> StatusResponse:
         try:
-            logger.info(f"Requesting status from {self.base_url}/status")
-            response = self.session.get(f"{self.base_url}/status", timeout=GET_STATUS_TIMEOUT)
-            status: StatusResponse = response.json()
-            logger.info(f"Received status: {status}")
+            logger.debug(f"Requesting status from {self.base_url}/status")
+            with requests.Session() as session:
+                response = session.get(f"{self.base_url}/status", timeout=GET_STATUS_TIMEOUT)
+                status: StatusResponse = response.json()
+                logger.debug(f"Received status: {status}")
             return status
         except requests.exceptions.Timeout as e:
             logger.error(f"Request timed out after {GET_STATUS_TIMEOUT}s")
@@ -36,7 +49,7 @@ class VideoTranslationClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to get status: {str(e)}")
             raise
-    
+
     def poll_until_complete(
         self,
         initial_delay: float = 1.0,
@@ -86,23 +99,27 @@ class VideoTranslationClient:
             
             if timeout and elapsed > timeout:
                 logger.error(f"Timeout reached after {elapsed:.1f} seconds")
-                raise
+                raise VideoTranslationTimeout(
+                    f"Timeout waiting for translation to complete after {elapsed:.1f}s"
+                )
             
-            logger.info(f"Attempt {attempt}/{max_retries}: Checking status")
+            logger.debug(f"Attempt {attempt}/{max_retries}: Checking status")
             status = self.__get_status()
             result = status.get("result")
             
             if result in ["completed", "error"]:
-                logger.info(f"Final status reached: {result}")
+                logger.info(f"Final status reached after {attempt}/{max_retries} attempts in {elapsed:.1f}s: {result}")
                 return status
             
             if attempt == max_retries:
                 logger.error(f"Max retries ({max_retries}) reached")
-                raise
+                raise MaxRetriesExceeded(
+                    f"Job still pending after {max_retries} attempts ({elapsed:.1f}s)"
+                )
             
             # Calculate next delay with exponential backoff
             next_delay = min(current_delay * 2, max_delay)
-            logger.info(
+            logger.debug(
                 f"Status still pending after {elapsed:.1f}s, "
                 f"waiting {current_delay:.1f}s before next check "
                 f"(next delay will be {next_delay:.1f}s)"
